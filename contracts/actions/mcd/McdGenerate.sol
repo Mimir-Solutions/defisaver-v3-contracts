@@ -4,6 +4,7 @@ pragma solidity =0.7.6;
 pragma experimental ABIEncoderV2;
 
 import "../../interfaces/mcd/IManager.sol";
+import "../../interfaces/mcd/ICropManager.sol";
 import "../../interfaces/mcd/ISpotter.sol";
 import "../../interfaces/mcd/IVat.sol";
 import "../../interfaces/mcd/IDaiJoin.sol";
@@ -25,22 +26,22 @@ contract McdGenerate is ActionBase, McdHelper {
         uint8[] memory _paramMapping,
         bytes32[] memory _returnValues
     ) public payable override returns (bytes32) {
-        (uint256 cdpId, uint256 amount, address to, address mcdManager) = parseInputs(_callData);
+        (uint256 cdpId, uint256 amount, address to, address mcdManager, address joinAddr, bool isCrop) = parseInputs(_callData);
 
         cdpId = _parseParamUint(cdpId, _paramMapping[0], _subData, _returnValues);
         amount = _parseParamUint(amount, _paramMapping[1], _subData, _returnValues);
         to = _parseParamAddr(to, _paramMapping[2], _subData, _returnValues);
 
-        amount = _mcdGenerate(cdpId, amount, to, mcdManager);
+        amount = _mcdGenerate(cdpId, amount, to, mcdManager, joinAddr, isCrop);
 
         return bytes32(amount);
     }
 
     /// @inheritdoc ActionBase
     function executeActionDirect(bytes[] memory _callData) public payable override {
-        (uint256 cdpId, uint256 amount, address to, address mcdManager) = parseInputs(_callData);
+        (uint256 cdpId, uint256 amount, address to, address mcdManager, address joinAddr, bool isCrop) = parseInputs(_callData);
 
-        _mcdGenerate(cdpId, amount, to, mcdManager);
+        _mcdGenerate(cdpId, amount, to, mcdManager, joinAddr, isCrop);
     }
 
     /// @inheritdoc ActionBase
@@ -59,20 +60,29 @@ contract McdGenerate is ActionBase, McdHelper {
         uint256 _vaultId,
         uint256 _amount,
         address _to,
-        address _mcdManager
+        address _mcdManager,
+        address _joinAddr,
+        bool _isCrop
     ) internal returns (uint256) {
-        IManager mcdManager = IManager(_mcdManager);
 
-        uint256 rate = IJug(JUG_ADDRESS).drip(mcdManager.ilks(_vaultId));
-        uint256 daiVatBalance = vat.dai(mcdManager.urns(_vaultId));
+        (address urn, bytes32 ilk) = _getUrnIlk(_mcdManager, _joinAddr, _vaultId, _isCrop);
 
-        // Generate dai and move to proxy balance
-        mcdManager.frob(
-            _vaultId,
-            int256(0),
-            normalizeDrawAmount(_amount, rate, daiVatBalance)
-        );
-        mcdManager.move(_vaultId, address(this), toRad(_amount));
+        uint256 rate = IJug(JUG_ADDRESS).drip(ilk);
+        uint256 daiVatBalance = vat.dai(urn);
+
+        int256 generateAmount = normalizeDrawAmount(_amount, rate, daiVatBalance);
+
+        if (_isCrop) {
+            _frobCrop(_mcdManager, _joinAddr, 0, generateAmount);
+        } else {
+            // Generate dai and move to proxy balance
+            IManager(_mcdManager).frob(
+                _vaultId,
+                int256(0),
+                generateAmount
+            );
+            IManager(_mcdManager).move(_vaultId, address(this), toRad(_amount));
+        }
 
         // add auth so we can exit the dai
         if (vat.can(address(this), address(DAI_JOIN_ADDR)) == 0) {
@@ -99,12 +109,16 @@ contract McdGenerate is ActionBase, McdHelper {
             uint256 vaultId,
             uint256 amount,
             address to,
-            address mcdManager
+            address mcdManager,
+            address joinAddr,
+            bool isCrop
         )
     {
         vaultId = abi.decode(_callData[0], (uint256));
         amount = abi.decode(_callData[1], (uint256));
         to = abi.decode(_callData[2], (address));
         mcdManager = abi.decode(_callData[3], (address));
+        joinAddr = abi.decode(_callData[4], (address));
+        isCrop = abi.decode(_callData[5], (bool));
     }
 }

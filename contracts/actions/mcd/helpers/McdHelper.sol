@@ -4,6 +4,7 @@ pragma solidity =0.7.6;
 
 import "../../../DS/DSMath.sol";
 import "../../../DS/DSProxy.sol";
+import "../../../interfaces/mcd/ICropManager.sol";
 import "../../../interfaces/mcd/IManager.sol";
 import "../../../interfaces/mcd/IJoin.sol";
 import "../../../interfaces/mcd/IVat.sol";
@@ -117,6 +118,16 @@ contract McdHelper is DSMath, MainnetMcdAddresses {
         return (collateral, rmul(debt, rate));
     }
 
+    function getUrnInfo(address _manager, address _userProxy, bytes32 _ilk) public view returns (uint256, uint256) {
+        address urn = ICropManager(_manager).proxy(_userProxy);
+
+        (uint collateral, uint debt) = vat.urns(_ilk, urn);
+        (,uint rate,,,) = vat.ilks(_ilk);
+
+        return (collateral, rmul(debt, rate));
+
+    }
+
     /// @notice Address that owns the DSProxy that owns the CDP
     /// @param _manager Manager contract
     /// @param _cdpId Id of the CDP
@@ -124,5 +135,19 @@ contract McdHelper is DSMath, MainnetMcdAddresses {
         DSProxy proxy = DSProxy(uint160(_manager.owns(_cdpId)));
 
         return proxy.owner();
+    }
+
+    function _frobCrop(address _managerAddr, address _joinAddr, int _dink, int _dart) internal {
+        ICropManager(_managerAddr).frob(_joinAddr, address(this), address(this), address(this), _dink, _dart);
+    }
+
+     function _getUrnIlk(address _mcdManager, address _joinAddr, uint256 _vaultId, bool _isCrop) internal view returns (address urn, bytes32 ilk) {
+        if (_isCrop) {
+            urn = ICropManager(_mcdManager).proxy(address(this));
+            ilk = IJoin(_joinAddr).ilk();
+        } else {
+            urn = IManager(_mcdManager).urns(_vaultId);
+            ilk = IManager(_mcdManager).ilks(_vaultId);
+        }
     }
 }

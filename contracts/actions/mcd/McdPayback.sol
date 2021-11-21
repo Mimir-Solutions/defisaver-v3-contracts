@@ -4,6 +4,7 @@ pragma solidity =0.7.6;
 pragma experimental ABIEncoderV2;
 
 import "../../interfaces/mcd/IManager.sol";
+import "../../interfaces/mcd/ICropManager.sol";
 import "../../interfaces/mcd/IVat.sol";
 import "../../interfaces/mcd/IDaiJoin.sol";
 import "../../utils/TokenUtils.sol";
@@ -23,6 +24,8 @@ contract McdPayback is ActionBase, McdHelper {
         uint256 amount;
         address from;
         address mcdManager;
+        address joinAddr;
+        bool isCrop;
     }
 
     /// @inheritdoc ActionBase
@@ -74,20 +77,24 @@ contract McdPayback is ActionBase, McdHelper {
 
     /// @notice Paybacks the debt for a specified vault
     function _mcdPayback(Params memory _inputData) internal {
-        IManager mcdManager = IManager(_inputData.mcdManager);
-
-        address urn = mcdManager.urns(_inputData.vaultId);
-        bytes32 ilk = mcdManager.ilks(_inputData.vaultId);
+        (address urn, bytes32 ilk) = _getUrnIlk(_inputData.mcdManager, _inputData.joinAddr, _inputData.vaultId, _inputData.isCrop);
 
         // if _amount is higher than current debt, repay all debt
         uint256 debt = getAllDebt(address(vat), urn, urn, ilk);
         _inputData.amount = _inputData.amount > debt ? debt : _inputData.amount;
+
         // pull Dai from user and join the maker pool
         DAI_ADDR.pullTokensIfNeeded(_inputData.from, _inputData.amount);
         DAI_ADDR.approveToken(DAI_JOIN_ADDR, _inputData.amount);
         IDaiJoin(DAI_JOIN_ADDR).join(urn, _inputData.amount);
-        // decrease the vault debt
-        mcdManager.frob(_inputData.vaultId, 0, normalizePaybackAmount(address(vat), urn, ilk));
+
+        int256 dart = normalizePaybackAmount(address(vat), urn, ilk);
+
+        if (_inputData.isCrop) {
+            _frobCrop(_inputData.mcdManager, _inputData.joinAddr, 0, dart);
+        } else {
+            IManager(_inputData.mcdManager).frob(_inputData.vaultId, 0, dart);
+        }
 
         logger.Log(
             address(this),
