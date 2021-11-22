@@ -14,6 +14,14 @@ import "./helpers/McdHelper.sol";
 /// @title Supply collateral to a Maker vault
 contract McdSupply is ActionBase, McdHelper {
     using TokenUtils for address;
+    struct Params {
+        uint256 vaultId;
+        uint256 amount;
+        address joinAddr;
+        address from;
+        address mcdManager;
+        bool isCrop;
+    }
 
     /// @inheritdoc ActionBase
     function executeAction(
@@ -22,25 +30,37 @@ contract McdSupply is ActionBase, McdHelper {
         uint8[] memory _paramMapping,
         bytes32[] memory _returnValues
     ) public payable override returns (bytes32) {
-        (uint256 vaultId, uint256 amount, address joinAddr, address from, address mcdManager, bool isCrop) =
-            parseInputs(_callData);
+        Params memory inputData = parseInputs(_callData);
 
-        vaultId = _parseParamUint(vaultId, _paramMapping[0], _subData, _returnValues);
-        amount = _parseParamUint(amount, _paramMapping[1], _subData, _returnValues);
-        joinAddr = _parseParamAddr(joinAddr, _paramMapping[2], _subData, _returnValues);
-        from = _parseParamAddr(from, _paramMapping[3], _subData, _returnValues);
+        inputData.vaultId = _parseParamUint(inputData.vaultId, _paramMapping[0], _subData, _returnValues);
+        inputData.amount = _parseParamUint(inputData.amount, _paramMapping[1], _subData, _returnValues);
+        inputData.joinAddr = _parseParamAddr(inputData.joinAddr, _paramMapping[2], _subData, _returnValues);
+        inputData.from = _parseParamAddr(inputData.from, _paramMapping[3], _subData, _returnValues);
 
-        uint256 returnAmount = _mcdSupply(vaultId, amount, joinAddr, from, mcdManager, isCrop);
+        uint256 returnAmount = _mcdSupply(
+            inputData.vaultId,
+            inputData.amount,
+            inputData.joinAddr,
+            inputData.from,
+            inputData.mcdManager,
+            inputData.isCrop
+        );
 
         return bytes32(returnAmount);
     }
 
     /// @inheritdoc ActionBase
     function executeActionDirect(bytes[] memory _callData) public payable override {
-        (uint256 vaultId, uint256 amount, address joinAddr, address from, address mcdManager, bool isCrop) =
-            parseInputs(_callData);
+        Params memory inputData = parseInputs(_callData);
 
-        _mcdSupply(vaultId, amount, joinAddr, from, mcdManager, isCrop);
+        _mcdSupply(
+            inputData.vaultId,
+            inputData.amount,
+            inputData.joinAddr,
+            inputData.from,
+            inputData.mcdManager,
+            inputData.isCrop
+        );
     }
 
     /// @inheritdoc ActionBase
@@ -116,23 +136,7 @@ contract McdSupply is ActionBase, McdHelper {
         }
     }
 
-    function parseInputs(bytes[] memory _callData)
-        internal
-        pure
-        returns (
-            uint256 vaultId,
-            uint256 amount,
-            address joinAddr,
-            address from,
-            address mcdManager,
-            bool isCrop
-        )
-    {
-        vaultId = abi.decode(_callData[0], (uint256));
-        amount = abi.decode(_callData[1], (uint256));
-        joinAddr = abi.decode(_callData[2], (address));
-        from = abi.decode(_callData[3], (address));
-        mcdManager = abi.decode(_callData[4], (address));
-        isCrop = abi.decode(_callData[5], (bool));
+    function parseInputs(bytes[] memory _callData) internal pure returns (Params memory inputData) {
+        inputData = abi.decode(_callData[0], (Params));
     }
 }

@@ -19,6 +19,15 @@ contract McdGenerate is ActionBase, McdHelper {
 
     ISpotter public constant spotter = ISpotter(SPOTTER_ADDRESS);
 
+    struct Params {
+        uint256 vaultId;
+        uint256 amount;
+        address to;
+        address mcdManager;
+        address joinAddr;
+        bool isCrop;
+    }
+
     /// @inheritdoc ActionBase
     function executeAction(
         bytes[] memory _callData,
@@ -26,22 +35,36 @@ contract McdGenerate is ActionBase, McdHelper {
         uint8[] memory _paramMapping,
         bytes32[] memory _returnValues
     ) public payable override returns (bytes32) {
-        (uint256 cdpId, uint256 amount, address to, address mcdManager, address joinAddr, bool isCrop) = parseInputs(_callData);
+        Params memory inputData = parseInputs(_callData);
 
-        cdpId = _parseParamUint(cdpId, _paramMapping[0], _subData, _returnValues);
-        amount = _parseParamUint(amount, _paramMapping[1], _subData, _returnValues);
-        to = _parseParamAddr(to, _paramMapping[2], _subData, _returnValues);
+        inputData.vaultId = _parseParamUint(inputData.vaultId, _paramMapping[0], _subData, _returnValues);
+        inputData.amount = _parseParamUint(inputData.amount, _paramMapping[1], _subData, _returnValues);
+        inputData.to = _parseParamAddr(inputData.to, _paramMapping[2], _subData, _returnValues);
 
-        amount = _mcdGenerate(cdpId, amount, to, mcdManager, joinAddr, isCrop);
+        inputData.amount = _mcdGenerate(
+            inputData.vaultId,
+            inputData.amount,
+            inputData.to,
+            inputData.mcdManager,
+            inputData.joinAddr,
+            inputData.isCrop
+        );
 
-        return bytes32(amount);
+        return bytes32(inputData.amount);
     }
 
     /// @inheritdoc ActionBase
     function executeActionDirect(bytes[] memory _callData) public payable override {
-        (uint256 cdpId, uint256 amount, address to, address mcdManager, address joinAddr, bool isCrop) = parseInputs(_callData);
+        Params memory inputData = parseInputs(_callData);
 
-        _mcdGenerate(cdpId, amount, to, mcdManager, joinAddr, isCrop);
+        _mcdGenerate(
+            inputData.vaultId,
+            inputData.amount,
+            inputData.to,
+            inputData.mcdManager,
+            inputData.joinAddr,
+            inputData.isCrop
+        );
     }
 
     /// @inheritdoc ActionBase
@@ -102,23 +125,7 @@ contract McdGenerate is ActionBase, McdHelper {
         return _amount;
     }
 
-    function parseInputs(bytes[] memory _callData)
-        internal
-        pure
-        returns (
-            uint256 vaultId,
-            uint256 amount,
-            address to,
-            address mcdManager,
-            address joinAddr,
-            bool isCrop
-        )
-    {
-        vaultId = abi.decode(_callData[0], (uint256));
-        amount = abi.decode(_callData[1], (uint256));
-        to = abi.decode(_callData[2], (address));
-        mcdManager = abi.decode(_callData[3], (address));
-        joinAddr = abi.decode(_callData[4], (address));
-        isCrop = abi.decode(_callData[5], (bool));
+    function parseInputs(bytes[] memory _callData) internal pure returns (Params memory inputData) {
+        inputData = abi.decode(_callData[0], (Params));
     }
 }
